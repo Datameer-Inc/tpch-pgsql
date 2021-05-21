@@ -13,9 +13,9 @@ from tpch4pgsql import postgresqldb as pgdb, load, query, prepare as prep, resul
 # default values for command line arguments:
 DEFAULT_HOST = "localhost"
 DEFAULT_PORT = 5432
-DEFAULT_USERNAME = "postgres"
-DEFAULT_PASSWORD = "test123"
-DEFAULT_DBNAME = "tpch"
+DEFAULT_USERNAME = "tpch"
+DEFAULT_PASSWORD = "tpch"
+DEFAULT_DBNAME = "tpchdb"
 DEFAULT_DATA_DIR = os.path.join(".", "data")
 DEFAULT_QUERY_ROOT = os.path.join(".", "query_root")
 DEFAULT_DBGEN_DIR = os.path.join(".", "tpch-dbgen")
@@ -157,12 +157,16 @@ def main(phase, host, port, user, password, database,
             exit(1)
         print("done performance tests")
         query.calc_metrics(RESULTS_DIR, run_timestamp, scale, num_streams)
-
+    elif phase == "deltas":
+        if query.apply_deltas(data_dir, UPDATE_DIR, host, port, database, user, password, num_streams, verbose):
+            print("applying deltas failed")
+            exit(1)
+        print("done applying deltas")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="tpch_pgsql")
 
-    parser.add_argument("phase", choices=["prepare", "load", "query"],
+    parser.add_argument("phase", choices=["prepare", "load", "query", "deltas"],
                         help="Phase of TPC-H benchmark to run.")
     parser.add_argument("-H", "--host", default=DEFAULT_HOST,
                         help="Address of host on which PostgreSQL instance runs; default is %s" % DEFAULT_HOST)
