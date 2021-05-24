@@ -78,7 +78,7 @@ def scale_to_num_streams(scale):
 
 def main(phase, host, port, user, password, database,
          dbgen_dir, data_dir, query_root,
-         scale, num_streams, verbose, read_only):
+         scale, num_streams, verbose, read_only, delta_stream):
     # TODO: unify doctsring, some is in reStructuredText, some is Google style
     # TODO: finish sphinx integration
     """Runs main code for three different phases.
@@ -158,7 +158,7 @@ def main(phase, host, port, user, password, database,
         print("done performance tests")
         query.calc_metrics(RESULTS_DIR, run_timestamp, scale, num_streams)
     elif phase == "deltas":
-        if query.apply_deltas(data_dir, UPDATE_DIR, host, port, database, user, password, num_streams, verbose):
+        if query.apply_deltas(data_dir, UPDATE_DIR, host, port, database, user, password, delta_stream, verbose):
             print("applying deltas failed")
             exit(1)
         print("done applying deltas")
@@ -194,6 +194,8 @@ if __name__ == "__main__":
     parser.add_argument("-r", "--read-only", action="store_true",
                         help="Do not execute refresh functions during the query phase, " +
                              "which allows for running it repeatedly")
+    parser.add_argument("-x", "--delta-stream", type=int, default=0,
+                        help="Delta stream to run indexed by 0, based on num_streams set during prepare")
     args = parser.parse_args()
 
     # Extract all arguments into variables
@@ -210,10 +212,11 @@ if __name__ == "__main__":
     password = args.password
     verbose = args.verbose
     read_only = args.read_only
+    delta_stream = args.delta_stream
 
     # if no num_streams was provided, then calculate default based on scale factor
     if num_streams == 0:
         num_streams = scale_to_num_streams(scale)
 
     # main
-    main(phase, host, port, user, password, database, dbgen_dir, data_dir, query_root, scale, num_streams, verbose, read_only)
+    main(phase, host, port, user, password, database, dbgen_dir, data_dir, query_root, scale, num_streams, verbose, read_only, delta_stream)
