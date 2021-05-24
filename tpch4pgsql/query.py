@@ -352,6 +352,33 @@ def run_throughput_test(query_root, data_dir, update_dir, delete_dir, generated_
         return 1
     return 0
 
+def apply_deltas(data_dir, update_dir,
+                   host, port, database, user, password,
+                   stream_number, verbose):
+    """
+
+    :param data_dir: subdirectory with data to be loaded
+    :param update_dir: subdirectory with data to be updated
+    :param host: hostname where the Postgres database is running
+    :param port: port number where the Postgres database is listening
+    :param database: database name, where the benchmark will be run
+    :param user: username of the Postgres user with full access to the benchmark DB
+    :param password: password for the Postgres user
+    :param stream_number: stream to execute based on -n during prepare, indexed by zero
+    :param verbose: True if more verbose output is required
+    without (re)loading the data, e.g. while developing
+    :return: 0 if successful, 1 otherwise
+    """
+    try:
+        print("apply_deltas started ...")
+        conn = pgdb.PGDB(host, port, database, user, password)
+        stream = int(stream_number)
+        if refresh_func1(conn, data_dir, update_dir, stream, 0, verbose):
+            return 1
+    except Exception as e:
+        print("unable to apply deltas. DB connection failed: %s" % e)
+        return 1
+    return 0
 
 def get_json_files_from(path):
     """Get list of all JSON file names in path
