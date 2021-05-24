@@ -354,7 +354,7 @@ def run_throughput_test(query_root, data_dir, update_dir, delete_dir, generated_
 
 def apply_deltas(data_dir, update_dir,
                    host, port, database, user, password,
-                   num_streams, verbose):
+                   stream_number, verbose):
     """
 
     :param data_dir: subdirectory with data to be loaded
@@ -364,7 +364,7 @@ def apply_deltas(data_dir, update_dir,
     :param database: database name, where the benchmark will be run
     :param user: username of the Postgres user with full access to the benchmark DB
     :param password: password for the Postgres user
-    :param num_streams: number of streams
+    :param stream_number: stream to execute based on -n during prepare, indexed by zero
     :param verbose: True if more verbose output is required
     without (re)loading the data, e.g. while developing
     :return: 0 if successful, 1 otherwise
@@ -372,11 +372,11 @@ def apply_deltas(data_dir, update_dir,
     try:
         print("apply_deltas started ...")
         conn = pgdb.PGDB(host, port, database, user, password)
-        stream = 0 # constant for power tests
-        if refresh_func1(conn, data_dir, update_dir, stream, num_streams, verbose):
+        stream = int(stream_number)
+        if refresh_func1(conn, data_dir, update_dir, stream, 0, verbose):
             return 1
     except Exception as e:
-        print("unable to run power tests. DB connection failed: %s" % e)
+        print("unable to apply deltas. DB connection failed: %s" % e)
         return 1
     return 0
 
