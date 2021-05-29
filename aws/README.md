@@ -11,11 +11,11 @@
 * `make info` - lists the addresses and credentials from tf state
 
 # Example
-First create AWS resources:
+First, create AWS resources:
 ```
 make create DB_INSTANCE_TYPE=db.t3.micro  EC2_INSTANCE_TYPE=t2.micro REGION=us-east-2 DB_PASS=handl3bar
 ```
-After all resources are created, run:
+After all of the resources are created, run:
 ```
 make connect
 ```
@@ -24,7 +24,7 @@ This will get you to the ec2 instance. Then run:
 ./tpch.sh
 ```
 which will create a tpch container, if it doesn't exist, and attach to it. 
-Once you're in the tpch container you will have all the tools needed to load data into database.
+Once you're in the tpch container you will have all the tools needed to load data into a database.
 # Populating DB with data
 1. Generate data w/ default scale (1.5M orders) but 12 update streams
 ```
@@ -48,7 +48,7 @@ Once you're in the tpch container you will have all the tools needed to load dat
  * Current terraform definitions create a dedicated VPC. After it is decided in which account/environment this will run, the definitions should use an existing subnet/VPC.
  * Stop/start functionality both for EC2 instance and DB
  * Get AMI ID that works in different AWS regions/accounts.
- * All tests were done only in 157586671174 account, us-east-2 region. In order to have this working in other accounts the docker image creation and upload process need also to be automated.
+ * All tests were done only in 157586671174 account, us-east-2 region. To have this working in other accounts the docker image creation and upload process need also to be automated.
 
 
  # Future work
