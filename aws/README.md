@@ -31,7 +31,7 @@ Once you're in the tpch container you will have all the tools needed to load dat
 # cd tpch-pgsql/
 # ./tpch_pgsql.py -n 12  prepare
 ```
-2. Load the data. If you're not sure what is your address/user/password run `make addresses` from the db_infra directory. 
+2. Load the data. If you're not sure what is your address/user/password run `make info` from the db_infra directory. 
 ```
 ./tpch_pgsql.py -H psqlbenchmarks.<XYZ>.us-east-2.rds.amazonaws.com -U postgres -d psqlbenchmarks -W handl3bar load
 ```
