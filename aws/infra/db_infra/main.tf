@@ -192,14 +192,3 @@ resource "aws_db_instance" "psql" {
   skip_final_snapshot    = true
   db_subnet_group_name   = aws_db_subnet_group.benchmarks.name
 }
-
-resource "aws_ssm_parameter" "password" {
-  name        = "/benchmarks/psql/password"
-  description = "Password for the PSQL benchmarks"
-  type        = "SecureString"
-  value       = var.db_password
-
-  tags = {
-    environment = "psql-benchmarks"
-  }
-}

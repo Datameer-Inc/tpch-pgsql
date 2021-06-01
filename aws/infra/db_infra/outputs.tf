@@ -35,3 +35,8 @@ output "db_pass" {
   description = "DB password"
   value = var.db_password
 }
+
+output "ssh_private_key" {
+  description = "Private key to the EC2 instance"
+  value = var.ssh_private_key
+}
