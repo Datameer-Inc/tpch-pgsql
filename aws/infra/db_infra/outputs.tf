@@ -4,6 +4,12 @@ output "db_address" {
   sensitive   = false
 }
 
+output "db_name" {
+  description = "DB address"
+  value       = aws_db_instance.psql.name
+  sensitive   = false
+}
+
 output "db_username" {
   description = "DB user"
   value = aws_db_instance.psql.username

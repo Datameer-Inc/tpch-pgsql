@@ -84,6 +84,22 @@ resource "aws_security_group" "db_sg" {
   }
 }
 
+data "aws_ami" "amazon-linux-2" {
+  most_recent = true
+  owners = ["amazon"]
+  filter {
+    name   = "owner-alias"
+    values = ["amazon"]
+  }
+  filter {
+    name = "architecture"
+    values = ["x86_64"]
+  }
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm*"]
+  }
+}
 
 resource "aws_key_pair" "public_key" {
   key_name   = "pqsql-benchmarks-key"
@@ -127,7 +143,7 @@ resource "aws_iam_instance_profile" "profile" {
 }
 
 resource "aws_instance" "ec2-instance" {
-  ami                         = "ami-077e31c4939f6a2f3"
+  ami                         = data.aws_ami.amazon-linux-2.id
   instance_type               = var.ec2_instance_type
   vpc_security_group_ids      = [aws_security_group.ec2_sg.id]
   associate_public_ip_address = true
