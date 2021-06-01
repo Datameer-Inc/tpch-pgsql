@@ -10,9 +10,36 @@ REGION				?=	us-east-2
 DB_PASS				?=	handl3bar
 
 
+ACCOUNT_ID=`aws sts get-caller-identity  | jq -r .Account`
+TAG="$(ACCOUNT_ID).dkr.ecr.us-east-2.amazonaws.com/psql_data_generation:latest"
+
+.PHONY: docker/build
+docker/build: ## Build the docker image
+	docker build --target final -t $(TAG) .
+
+.PHONY: docker/login
+docker/login: ## Log into ECR
+docker/login:
+	aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin $(ACCOUNT_ID).dkr.ecr.us-east-2.amazonaws.com
+
+.PHONY: docker/create-repo
+docker/create-repo: ## Create the ECR repository (only if required)
+	aws ecr create-repository \
+	--repository-name psql_data_generation \
+	--image-scanning-configuration scanOnPush=false --region us-east-2
+
+.PHONY: docker/push
+docker/push: ## Push to docker image (only if required)
+docker/push:
+	docker push $(TAG)
+
+.PHONY: docker/run
+docker/run: ## Run the docker image with PWD mounted as /tpch-pgsql
+	docker run -v $(PWD):/tpch-pgsql --rm -ti $(TAG) bash
+
 .PHONY: preflight
 preflight:
-	@command -v terraform &> /dev/null || { echo "[ERROR] Please install terraform."; exit 1; }
+	@command -v terraform &> /dev/null || { echo "[ERROR] Please install terraform with 'make local-terraform'."; exit 1; }
 
 .PHONY: keygen
 keygen:
@@ -38,47 +65,64 @@ tfcmd:
 		-var="region=$(REGION)" \
 		-var="db_password=$(DB_PASS)"
 
-.PHONY: init
-init: TF_CMD=init ## Init terraform resources
-init: preflight tfcmd
+.PHONY: tf/init
+tf/init: TF_CMD=init ## Init terraform resources
+tf/init: preflight tfcmd
 
-.PHONY: plan
-plan: TF_CMD=plan ## Plan all AWS resources
-plan: preflight keygen tfcmd
+.PHONY: tf/plan
+tf/plan: TF_CMD=plan ## Plan all AWS resources
+tf/plan: preflight keygen tfcmd
 
-.PHONY: apply
-apply: TF_CMD=apply ## Apply all AWS resources
-apply: preflight tfcmd
+.PHONY: tf/apply
+tf/apply: TF_CMD=apply ## Apply all AWS resources
+tf/apply: preflight tfcmd
 
-.PHONY: refresh
-refresh: TF_CMD=refresh ## Refresh all AWS resources
-refresh: preflight tfcmd
+.PHONY: tf/refresh
+tf/refresh: TF_CMD=refresh ## Refresh all AWS resources
+tf/refresh: preflight tfcmd
 	rm -f infra/db_infra/tfoutput.json
 
-.PHONY: destroy
-destroy: TF_CMD=destroy ## Destroy all AWS resources
-destroy: preflight tfcmd keydel
+.PHONY: tf/destroy
+tf/destroy: TF_CMD=destroy ## Destroy all AWS resources
+tf/destroy: preflight tfcmd keydel
 
-
-.PHONY: output/gen
-output/gen: ## Generate terraform output json
-output/gen: preflight
+.PHONY: tf/output-gen
+tf/output-gen: ## Generate terraform output json
+tf/output-gen: preflight
 	cd infra/db_infra && \
 	[ -z "$$FORCE" ] || rm -f tfoutput.json; \
 	[ -f tfoutput.json ] || terraform output -json > tfoutput.json
 
-.PHONY: output
-output: ## Show terraform output information
-output: preflight output/gen
+.PHONY: tf/output
+tf/output: ## Show terraform output information
+tf/output: preflight tf/output-gen
 	cat infra/db_infra/tfoutput.json
 
-.PHONY: sample-print
-sample-print: export STREAMS		?= 12
-sample-print: export DB_ADDR		?= $(shell jq -r '.db_address.value' infra/db_infra/tfoutput.json)
-sample-print: export DB_NAME		?= $(shell jq -r '.db_name.value' infra/db_infra/tfoutput.json)
-sample-print: export DB_USER		?= $(shell jq -r '.db_username.value' infra/db_infra/tfoutput.json)
-sample-print: export DB_PASS		?= $(shell jq -r '.db_pass.value' infra/db_infra/tfoutput.json)
-sample-print:
+.PHONY: connect
+connect: ## Connect to the terraformed ec2 instance
+	ssh \
+		-i infra/db_infra/id_rsa \
+		ec2-user@`jq -r '.ec2_address.value' infra/db_infra/tfoutput.json`
+
+.PHONY: sync
+sync: ## Copy source files the to the terraformed EC2 instance
+sync: export EC2_ADDR		?= $(shell jq -r '.ec2_address.value' infra/db_infra/tfoutput.json)
+sync:
+	cd .. && \
+		rsync \
+		-e 'ssh -i aws/infra/db_infra/id_rsa' \
+		-au \
+		--exclude '.terraform' \
+		--delete-excluded \
+		$$(pwd) ec2-user@$(EC2_ADDR):~/
+
+.PHONY: app/sample-print
+app/sample-print: export STREAMS		?= 12
+app/sample-print: export DB_ADDR		?= $(shell jq -r '.db_address.value' infra/db_infra/tfoutput.json)
+app/sample-print: export DB_NAME		?= $(shell jq -r '.db_name.value' infra/db_infra/tfoutput.json)
+app/sample-print: export DB_USER		?= $(shell jq -r '.db_username.value' infra/db_infra/tfoutput.json)
+app/sample-print: export DB_PASS		?= $(shell jq -r '.db_pass.value' infra/db_infra/tfoutput.json)
+app/sample-print:
 	@echo "Generate data w/ default scale (1.5M orders) but $$STREAMS update streams"
 	@echo "./tpch_pgsql.py -n $(STREAMS)  prepare"
 	@echo
@@ -88,15 +132,19 @@ sample-print:
 	@echo "Apply deltas:"
 	@for i in $$(seq 0 $$STREAMS); do echo "./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) -x $$i deltas"; done
 
+.PHONY: app/sample-commands
+app/sample-commands: ## Generate sample commands
+app/sample-commands: output-gen app/sample-print
+
 # TODO - integrate calling tpch commands (prepare, load, apply, etc)
 
 # TODO - allow for some useful psql commands such as
-.PHONY: table-count-sql
-table-count-sql: export DB_ADDR		?= $(shell jq -r '.db_address.value' infra/db_infra/tfoutput.json)
-table-count-sql: export DB_NAME		?= $(shell jq -r '.db_name.value' infra/db_infra/tfoutput.json)
-table-count-sql: export DB_USER		?= $(shell jq -r '.db_username.value' infra/db_infra/tfoutput.json)
-table-count-sql: export DB_PASS		?= $(shell jq -r '.db_pass.value' infra/db_infra/tfoutput.json)
-table-count-sql:
+.PHONY: app/table-count-sql
+app/table-count-sql: export DB_ADDR		?= $(shell jq -r '.db_address.value' infra/db_infra/tfoutput.json)
+app/table-count-sql: export DB_NAME		?= $(shell jq -r '.db_name.value' infra/db_infra/tfoutput.json)
+app/table-count-sql: export DB_USER		?= $(shell jq -r '.db_username.value' infra/db_infra/tfoutput.json)
+app/table-count-sql: export DB_PASS		?= $(shell jq -r '.db_pass.value' infra/db_infra/tfoutput.json)
+app/table-count-sql:
 	@PGPASSWORD=$(DB_PASS) psql -w -U $(DB_USER) -h $(DB_ADDR) $(DB_NAME) -c \
 	"select \
 		table_schema, \
@@ -108,7 +156,7 @@ table-count-sql:
 			query_to_xml(format('select count(*) as cnt from %I.%I', table_schema, table_name), false, true, '') as xml_count \
 		from information_schema.tables where table_schema = 'public') t"
 
-local-terraform: ## Install a local copy of terraform if needed
+local-terraform: ## Install a local copy of terraform (only if required)
 local-terraform: TF_VERSION		?= 0.15.4
 local-terraform: INSTALL_PATH	?= $(HOME)/.local/bin
 local-terraform:
@@ -124,29 +172,6 @@ local-terraform:
 	echo "Terraform installed locally under $(INSTALL_PATH)/terraform" && \
 	command -v terraform | grep -qE "^$(INSTALL_PATH)/terraform" || \
 	echo "Terraform not yet found - maybe try running 'export PATH=$(INSTALL_PATH):$$PATH'"
-
-.PHONY: sample-commands
-sample-commands: ## Generate sample commands
-sample-commands: output/gen sample-print
-
-.PHONY: sync
-sync: ## Copy the to the terraformed ec2 instance
-sync: export EC2_ADDR		?= $(shell jq -r '.ec2_address.value' infra/db_infra/tfoutput.json)
-sync:
-	cd .. && \
-		rsync \
-		-e 'ssh -i aws/infra/db_infra/id_rsa' \
-		-au \
-		--exclude '.terraform' \
-		--delete-excluded \
-		$$(pwd) ec2-user@$(EC2_ADDR):~/
-
-
-.PHONY: connect
-connect: ## Connect to the terraformed ec2 instance
-	ssh \
-		-i infra/db_infra/id_rsa \
-		ec2-user@`jq -r '.ec2_address.value' infra/db_infra/tfoutput.json`
 
 .PHONY: help
 help: # Makefile Help Page
