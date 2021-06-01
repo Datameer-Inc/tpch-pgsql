@@ -3,14 +3,12 @@ MKFILE_DIR			:= $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 shell				:= /bin/bash
 MAKEFLAGS			+= --no-print-directory
 
-SSH_PRIVATE_KEY		?= $(shell cat $(MKFILE_DIR)/../infra/db_infra/id_rsa)
 ACCOUNT_ID=`aws sts get-caller-identity  | jq -r .Account`
 TAG="$(ACCOUNT_ID).dkr.ecr.us-east-2.amazonaws.com/psql_data_generation:latest"
 
 .PHONY: build
 build: ## Build the docker image
 	docker build \
-		--build-arg SSH_PRIVATE_KEY="$(SSH_PRIVATE_KEY)" \
 		--target final \
 		-t $(TAG) \
 		../../

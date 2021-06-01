@@ -5,19 +5,8 @@ ENV REQUIRED="git wget zip"
 RUN apt-get update
 RUN apt-get install ${REQUIRED} -y
 
-ARG SSH_PRIVATE_KEY
-RUN \
-        mkdir /root/.ssh/ &&\
-        echo "${SSH_PRIVATE_KEY}" > /root/.ssh/id_rsa && \
-        chmod 0600 /root/.ssh/id_rsa
-
 COPY . /tpch-pgsql
-# RUN \
-#         touch /root/.ssh/known_hosts && \
-#         ssh-keyscan github.com >> /root/.ssh/known_hosts && \
-#         git clone git@github.com:Datameer-Inc/tpch-pgsql.git && \
-#         cd /tpch-pgsql && \
-#         git checkout spike/apply-deltas
+
 RUN \
         cd /tpch-pgsql && \
         wget -q https://github.com/electrum/tpch-dbgen/archive/32f1c1b92d1664dba542e927d23d86ffa57aa253.zip -O tpch-dbgen.zip && \
