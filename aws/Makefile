@@ -88,9 +88,29 @@ sample-print:
 	@echo "Apply deltas:"
 	@for i in $$(seq 0 $$STREAMS); do echo "./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) -x $$i deltas"; done
 
+# TODO - integrate calling tpch commands (prepare, load, apply, etc)
+
+# TODO - allow for some useful psql commands such as
+.PHONY: table-count-sql
+table-count-sql: export DB_ADDR		?= $(shell jq -r '.db_address.value' infra/db_infra/tfoutput.json)
+table-count-sql: export DB_NAME		?= $(shell jq -r '.db_name.value' infra/db_infra/tfoutput.json)
+table-count-sql: export DB_USER		?= $(shell jq -r '.db_username.value' infra/db_infra/tfoutput.json)
+table-count-sql: export DB_PASS		?= $(shell jq -r '.db_pass.value' infra/db_infra/tfoutput.json)
+table-count-sql:
+	@PGPASSWORD=$(DB_PASS) psql -w -U $(DB_USER) -h $(DB_ADDR) $(DB_NAME) -c \
+	"select \
+		table_schema, \
+		table_name, \
+		(xpath('/row/cnt/text()', xml_count))[1]::text::int as row_count \
+	from (select \
+			table_name, \
+			table_schema, \
+			query_to_xml(format('select count(*) as cnt from %I.%I', table_schema, table_name), false, true, '') as xml_count \
+		from information_schema.tables where table_schema = 'public') t"
+
 .PHONY: sample-commands
 sample-commands: ## Generate sample commands
-sample-commands: preflight output/gen sample-print
+sample-commands: output/gen sample-print
 
 .PHONY: sync
 sync: ## Copy the to the terraformed ec2 instance
