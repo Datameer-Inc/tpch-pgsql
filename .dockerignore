@@ -9,6 +9,11 @@
 *.tfstate.*
 **/tfoutput.json
 
+# Data files
+data
+tpch-dbgen
+query_root
+
 # Module directory
 .terraform
 **/.idea

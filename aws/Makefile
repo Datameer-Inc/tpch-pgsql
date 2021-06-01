@@ -1,4 +1,5 @@
 MKFILE_DIR			:=  $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+ROOT_DIR			:=  $(shell dirname $(MKFILE_DIR))
 .DEFAULT_GOAL		:=  help
 SHELL				:=  /bin/bash
 MAKEFLAGS			+= --no-print-directory
@@ -12,11 +13,11 @@ DB_PASS				?=	handl3bar
 ACCOUNT_ID=`aws sts get-caller-identity  | jq -r .Account`
 TAG="$(ACCOUNT_ID).dkr.ecr.us-east-2.amazonaws.com/psql_data_generation:latest"
 
-DB_INFRA_DIR		= infra/db_infra
+DB_INFRA_DIR		= $(MKFILE_DIR)/infra/db_infra
 
 .PHONY: docker/build
 docker/build: ## Build the docker image
-	docker build --target final -t $(TAG) ../
+	docker build --target final -t $(TAG) $(ROOT_DIR)
 
 .PHONY: docker/login
 docker/login: ## Log into ECR
@@ -36,7 +37,7 @@ docker/push:
 
 .PHONY: docker/run
 docker/run: ## Run the docker image with PWD mounted as /tpch-pgsql
-	docker run -v $(PWD)/../:/tpch-pgsql --rm -ti $(TAG) bash
+	docker run -v $(ROOT_DIR):/tpch-pgsql --rm -ti $(TAG) bash
 
 .PHONY: preflight
 preflight:
@@ -102,13 +103,13 @@ tf/output: preflight tf/output-gen
 .PHONY: app/copy-tpch-dbgen
 app/copy-tpch-dbgen: ## Copy tpch-dbgen directory if necessary
 	@\
-	[ -d "$(MKFILE_DIR)/tpch-dbgen" ] || \
-	[ -d "/opt/tpch-dbgen" ] && cp -r /opt/tpch-dbgen $(MKFILE_DIR) || \
+	[ -d "$(ROOT_DIR)/tpch-dbgen" ] || \
+	[ -d "/opt/tpch-dbgen" ] && cp -r /opt/tpch-dbgen $(ROOT_DIR) || \
 	{ \
 		cd /opt && \
         wget -q https://github.com/electrum/tpch-dbgen/archive/32f1c1b92d1664dba542e927d23d86ffa57aa253.zip -O tpch-dbgen.zip && \
         unzip -q tpch-dbgen.zip && mv tpch-dbgen-32f1c1b92d1664dba542e927d23d86ffa57aa253 tpch-dbgen && rm tpch-dbgen.zip && \
-		cp -r /opt/tpch-dbgen $(MKFILE_DIR); \
+		cp -r /opt/tpch-dbgen $(ROOT_DIR); \
 	}
 
 
@@ -163,7 +164,7 @@ connect: ## Connect to the terraformed ec2 instance
 sync: ## Copy source files the to the terraformed EC2 instance
 sync: export EC2_ADDR		?= $(shell jq -r '.ec2_address.value' $(DB_INFRA_DIR)/tfoutput.json)
 sync: guard-EC2_ADDR
-	rsync \
+	cd $(ROOT_DIR) && rsync \
 		-e 'ssh -i $(DB_INFRA_DIR)/id_rsa' \
 		-au \
 		--exclude '.terraform' \
