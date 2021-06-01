@@ -1,24 +1,18 @@
-FROM ubuntu:20.04 as intermediate
+# first stage
+FROM python:3.8 AS builder
+COPY requirements.txt .
 
-ENV REQUIRED="git wget zip"
+# install dependencies to the local user directory (eg. /root/.local)
+RUN pip install --user -r requirements.txt
 
-RUN apt-get update
-RUN apt-get install ${REQUIRED} -y
-
+FROM ubuntu:20.04 as final
+ENV REQUIRED="postgresql-client build-essential python3 pip wget unzip vim.tiny jq"
 COPY . /tpch-pgsql
-
+COPY --from=builder /root/.local /root/.local
 RUN \
+        apt-get update && \
+        apt-get install --no-install-recommends ${REQUIRED} -y && \
+        apt-get clean && rm -rf /var/lib/apt/lists/* && \
         cd /tpch-pgsql && \
         wget -q https://github.com/electrum/tpch-dbgen/archive/32f1c1b92d1664dba542e927d23d86ffa57aa253.zip -O tpch-dbgen.zip && \
         unzip -q tpch-dbgen.zip && mv tpch-dbgen-32f1c1b92d1664dba542e927d23d86ffa57aa253 tpch-dbgen && rm tpch-dbgen.zip
-
-
-FROM ubuntu:20.04 as final
-ENV REQUIRED="postgresql-client build-essential python3 pip"
-COPY --from=intermediate /tpch-pgsql /tpch-pgsql
-RUN \
-        apt-get update && \
-        apt-get install ${REQUIRED} -y && \
-        rm -rf /var/lib/apt/lists/* && \
-        cd /tpch-pgsql && \
-        pip3 install -r requirements.txt
