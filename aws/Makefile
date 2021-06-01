@@ -108,6 +108,23 @@ table-count-sql:
 			query_to_xml(format('select count(*) as cnt from %I.%I', table_schema, table_name), false, true, '') as xml_count \
 		from information_schema.tables where table_schema = 'public') t"
 
+local-terraform: ## Install a local copy of terraform if needed
+local-terraform: TF_VERSION		?= 0.15.4
+local-terraform: INSTALL_PATH	?= $(HOME)/.local/bin
+local-terraform:
+	@terraform -v | awk -Fv '/Terraform v/ { print $2 }' | grep $(TF_VERSION) || \
+	if [ ! -d "$(INSTALL_PATH)/terraform_$(TF_VERSION)" ]; then \
+		wget https://releases.hashicorp.com/terraform/0.15.4/terraform_$(TF_VERSION)_linux_amd64.zip && \
+		unzip terraform_$(TF_VERSION)_linux_amd64.zip && \
+		rm terraform_$(TF_VERSION)_linux_amd64.zip && \
+		mkdir -p $(INSTALL_PATH) && \
+		mv terraform $(INSTALL_PATH)/terraform_$(TF_VERSION); \
+	fi
+	@ln -sf $(INSTALL_PATH)/terraform_$(TF_VERSION) $(INSTALL_PATH)/terraform && \
+	echo "Terraform installed locally under $(INSTALL_PATH)/terraform" && \
+	command -v terraform | grep -qE "^$(INSTALL_PATH)/terraform" || \
+	echo "Terraform not yet found - maybe try running 'export PATH=$(INSTALL_PATH):$$PATH'"
+
 .PHONY: sample-commands
 sample-commands: ## Generate sample commands
 sample-commands: output/gen sample-print
