@@ -7,7 +7,7 @@ MAKEFLAGS			+= --no-print-directory
 # vars
 DB_INSTANCE_TYPE	?=	db.t3.small
 EC2_INSTANCE_TYPE	?=	t3.micro
-REGION				?=	us-east-2
+REGION				?=	eu-west-2 # this is where the redeshift cluster is located
 
 ACCOUNT_ID			=`aws sts get-caller-identity  | jq -r .Account`
 TAG					="$(ACCOUNT_ID).dkr.ecr.us-east-2.amazonaws.com/psql_data_generation:latest"
