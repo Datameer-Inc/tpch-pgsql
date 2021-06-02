@@ -113,7 +113,7 @@ resource "aws_key_pair" "public_key" {
   public_key = tls_private_key.pk.public_key_openssh
 
   provisioner "local-exec" { # Create a "myKey.pem" to your computer!!
-    command = "echo '${tls_private_key.pk.private_key_pem}' > ./pqsql-benchmarks-key.pem && chmod 0400 ./pqsql-benchmarks-key.pem && openssl rsa -in mykey.pem -pubout > ./pqsql-benchmarks-key.pub"
+    command = "echo '${tls_private_key.pk.private_key_pem}' > ./pqsql-benchmarks-key.pem && chmod 0400 ./pqsql-benchmarks-key.pem && openssl rsa -in pqsql-benchmarks-key.pem -pubout > ./pqsql-benchmarks-key.pub"
   }
 }
 
