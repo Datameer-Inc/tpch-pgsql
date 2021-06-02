@@ -101,9 +101,20 @@ data "aws_ami" "amazon-linux-2" {
   }
 }
 
+# generate a private key
+resource "tls_private_key" "pk" {
+  algorithm = "RSA"
+  rsa_bits  = 4096
+}
+
+# create aws key
 resource "aws_key_pair" "public_key" {
   key_name   = "pqsql-benchmarks-key"
-  public_key = var.ssh_public_key
+  public_key = tls_private_key.pk.public_key_openssh
+
+  provisioner "local-exec" { # Create a "myKey.pem" to your computer!!
+    command = "echo '${tls_private_key.pk.private_key_pem}' > ./pqsql-benchmarks-key.pem && chmod 0400 ./pqsql-benchmarks-key.pem && openssl rsa -in mykey.pem -pubout > ./pqsql-benchmarks-key.pub"
+  }
 }
 
 resource "aws_s3_bucket" "psql_benchmark_data" {
@@ -151,6 +162,10 @@ resource "aws_instance" "ec2-instance" {
   key_name                    = aws_key_pair.public_key.key_name
   iam_instance_profile        = aws_iam_instance_profile.profile.name
 
+  root_block_device {
+    volume_size = "100"
+  }
+
   provisioner "file" {
     source      = "scripts/tpch.sh"
     destination = "/home/ec2-user/tpch.sh"
@@ -159,7 +174,8 @@ resource "aws_instance" "ec2-instance" {
   provisioner "remote-exec" {
     inline = [
       "sudo yum update -y",
-      "sudo amazon-linux-extras install docker -y",
+      "sudo amazon-linux-extras install docker jq -y",
+      "sudo yum install jq -y",
       "sudo service docker start",
       "sudo usermod -a -G docker ec2-user",
       "chmod +x /home/ec2-user/tpch.sh",
@@ -169,13 +185,19 @@ resource "aws_instance" "ec2-instance" {
   connection {
     type        = "ssh"
     user        = "ec2-user"
-    private_key = var.ssh_private_key
+    private_key = tls_private_key.pk.private_key_pem
     host        = self.public_ip
   }
 
   tags = {
     "name" = "db_benchmarks"
   }
+}
+
+resource "random_password" "password" {
+  length           = 16
+  special          = true
+  override_special = "_-"
 }
 
 resource "aws_db_instance" "psql" {
@@ -186,9 +208,18 @@ resource "aws_db_instance" "psql" {
   name                   = "psqlbenchmarks"
   identifier             = "psqlbenchmarks"
   username               = var.db_username
-  password               = var.db_password
+  password               = random_password.password.result
   vpc_security_group_ids = [aws_security_group.db_sg.id]
   publicly_accessible    = true
   skip_final_snapshot    = true
   db_subnet_group_name   = aws_db_subnet_group.benchmarks.name
+}
+
+# hacks to render sensitive values
+data "template_file" "db_password" {
+  template = aws_db_instance.psql.password
+}
+
+data "template_file" "ssh_private_key" {
+  template = tls_private_key.pk.private_key_pem
 }

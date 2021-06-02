@@ -23,18 +23,6 @@ variable "db_port" {
   default = 5432
 }
 
-variable "db_password" {
-  type = string
-}
-
 variable "db_username" {
-  type = string
-}
-
-variable "ssh_public_key" {
-  type = string
-}
-
-variable "ssh_private_key" {
   type = string
 }

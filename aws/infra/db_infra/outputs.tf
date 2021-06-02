@@ -16,6 +16,10 @@ output "db_username" {
   sensitive = false
 }
 
+output "db_pass" {
+  value     = data.template_file.db_password.rendered
+}
+
 output "ec2_address" {
   description = "EC2 address"
   value = aws_instance.ec2-instance.public_dns
@@ -31,12 +35,7 @@ output "region" {
   value = var.region
 }
 
-output "db_pass" {
-  description = "DB password"
-  value = var.db_password
+output "ssh_private_key" {
+  value     = data.template_file.ssh_private_key.rendered
 }
 
-output "ssh_private_key" {
-  description = "Private key to the EC2 instance"
-  value = var.ssh_private_key
-}

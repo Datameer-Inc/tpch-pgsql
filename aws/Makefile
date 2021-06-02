@@ -8,12 +8,24 @@ MAKEFLAGS			+= --no-print-directory
 DB_INSTANCE_TYPE	?=	db.t3.small
 EC2_INSTANCE_TYPE	?=	t3.micro
 REGION				?=	us-east-2
-DB_PASS				?=	handl3bar
 
-ACCOUNT_ID=`aws sts get-caller-identity  | jq -r .Account`
-TAG="$(ACCOUNT_ID).dkr.ecr.us-east-2.amazonaws.com/psql_data_generation:latest"
+ACCOUNT_ID			=`aws sts get-caller-identity  | jq -r .Account`
+TAG					="$(ACCOUNT_ID).dkr.ecr.us-east-2.amazonaws.com/psql_data_generation:latest"
 
+# conditional output vars
+ECHO_CMD 			= $(shell [[ "1" == "$$DRY_RUN" ]] && echo 'echo' || echo '')
 DB_INFRA_DIR		= $(MKFILE_DIR)/infra/db_infra
+SSH_PRIVATE_KEY_PATH= $(DB_INFRA_DIR)/pqsql-benchmarks-key.pem
+DB_ADDR				?= $(shell jq -r '.db_address.value' $(DB_INFRA_DIR)/tfoutput.json 2>/dev/null || true)
+DB_NAME				?= $(shell jq -r '.db_name.value' $(DB_INFRA_DIR)/tfoutput.json 2>/dev/null || true)
+DB_USER				?= $(shell jq -r '.db_username.value' $(DB_INFRA_DIR)/tfoutput.json 2>/dev/null || true)
+DB_PASS				?= $(shell jq -r '.db_pass.value' $(DB_INFRA_DIR)/tfoutput.json 2>/dev/null || true)
+EC2_ADDR			?= $(shell jq -r '.ec2_address.value' $(DB_INFRA_DIR)/tfoutput.json 2>/dev/null || true)
+SSH_PRIVATE_KEY		?= $(shell jq -r '.ssh_private_key.value' $(DB_INFRA_DIR)/tfoutput.json 2>/dev/null || true)
+
+# default data vars
+STREAMS				?= 12
+SCALE				?= 1
 
 .PHONY: docker/build
 docker/build: ## Build the docker image
@@ -43,29 +55,13 @@ docker/run: ## Run the docker image with PWD mounted as /tpch-pgsql
 preflight:
 	@command -v terraform &> /dev/null || { echo "[ERROR] Please install terraform with 'make local-terraform'."; exit 1; }
 
-.PHONY: keygen
-keygen:
-	cd $(DB_INFRA_DIR) && \
-	[ -f id_rsa ] || ssh-keygen \
-		-f id_rsa \
-		-t rsa \
-		-N ""
-
-.PHONY: keydel
-keydel:
-	cd $(DB_INFRA_DIR) && \
-	rm id_rsa*
-
 .PHONY: tfcmd
-tfcmd:
+tfcmd: guard-TF_CMD
 	cd $(DB_INFRA_DIR) && \
 	terraform $(TF_CMD) \
-		-var="ssh_public_key=`cat id_rsa.pub`" \
-		-var="ssh_private_key=`cat id_rsa`" \
 		-var="ec2_instance_type=$(EC2_INSTANCE_TYPE)" \
 		-var="rds_instance_type=$(DB_INSTANCE_TYPE)" \
-		-var="region=$(REGION)" \
-		-var="db_password=$(DB_PASS)"
+		-var="region=$(REGION)"
 
 .PHONY: tf/init
 tf/init: TF_CMD=init ## Init terraform resources
@@ -73,11 +69,15 @@ tf/init: preflight tfcmd
 
 .PHONY: tf/plan
 tf/plan: TF_CMD=plan ## Plan all AWS resources
-tf/plan: preflight keygen tfcmd
+tf/plan: preflight tfcmd
 
 .PHONY: tf/apply
 tf/apply: TF_CMD=apply ## Apply all AWS resources
 tf/apply: preflight tfcmd
+
+.PHONY: tf/apply-refresh-only
+tf/apply-refresh-only: TF_CMD=apply -refresh-only ## Apply all AWS resources
+tf/apply-refresh-only: preflight tfcmd
 
 .PHONY: tf/refresh
 tf/refresh: TF_CMD=refresh ## Refresh all AWS resources
@@ -86,7 +86,7 @@ tf/refresh: preflight tfcmd
 
 .PHONY: tf/destroy
 tf/destroy: TF_CMD=destroy ## Destroy all AWS resources
-tf/destroy: preflight tfcmd keydel
+tf/destroy: preflight tfcmd
 
 .PHONY: tf/output-gen
 tf/output-gen: ## Generate terraform output json
@@ -112,16 +112,27 @@ app/copy-tpch-dbgen: ## Copy tpch-dbgen directory if necessary
 		cp -r /opt/tpch-dbgen $(ROOT_DIR); \
 	}
 
+.PHONY: app/prepare
+app/prepare: ## Prepare/generate the data (optional DRY_RUN=1, SCALE=?, STREAMS=?)
+app/prepare: guard-STREAMS guard-SCALE app/copy-tpch-dbgen
+	@cd $(ROOT_DIR) && $(ECHO_CMD) ./tpch_pgsql.py -s $(SCALE) -n $(STREAMS) prepare
 
-.PHONY: app/sample-print
-app/sample-print: export STREAMS		?= 12
-app/sample-print: export DB_ADDR		?= $(shell jq -r '.db_address.value' $(DB_INFRA_DIR)/tfoutput.json)
-app/sample-print: export DB_NAME		?= $(shell jq -r '.db_name.value' $(DB_INFRA_DIR)/tfoutput.json)
-app/sample-print: export DB_USER		?= $(shell jq -r '.db_username.value' $(DB_INFRA_DIR)/tfoutput.json)
-app/sample-print: export DB_PASS		?= $(shell jq -r '.db_pass.value' $(DB_INFRA_DIR)/tfoutput.json)
-app/sample-print: guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS
+.PHONY: app/load
+app/load: ## Load the data (optional DRY_RUN=1)
+app/load: guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS app/copy-tpch-dbgen
+	@cd $(ROOT_DIR) && $(ECHO_CMD) ./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) load
+
+.PHONY: app/delta/%
+app/delta/%: ## Add delta e.g. app/delta/1, app/delta/2, etc (optional DRY_RUN=1)
+app/delta/%:
+app/delta/%: guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS app/copy-tpch-dbgen
+	@cd $(ROOT_DIR) && $(ECHO_CMD) ./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) -x $* deltas
+
+.PHONY: app/sample-commands
+app/sample-commands: ## Generate sample commands
+app/sample-commands: guard-SCALE guard-STREAMS guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS app/copy-tpch-dbgen
 	@echo "Generate data w/ default scale (1.5M orders) but $$STREAMS update streams"
-	@echo "./tpch_pgsql.py -n $(STREAMS)  prepare"
+	@echo "./tpch_pgsql.py -s $(SCALE) -n $(STREAMS) prepare"
 	@echo
 	@echo "Load data:"
 	@echo "./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) load"
@@ -129,19 +140,11 @@ app/sample-print: guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS
 	@echo "Apply deltas:"
 	@for i in $$(seq 0 $$STREAMS); do echo "./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) -x $$i deltas"; done
 
-.PHONY: app/sample-commands
-app/sample-commands: ## Generate sample commands
-app/sample-commands: app/sample-print
-
 # TODO - integrate calling tpch commands (prepare, load, apply, etc)
 
 # TODO - allow for some useful psql commands such as
 .PHONY: app/table-count-sql
 app/table-count-sql: ## DB util - list table counts
-app/table-count-sql: export DB_ADDR		?= $(shell jq -r '.db_address.value' $(DB_INFRA_DIR)/tfoutput.json)
-app/table-count-sql: export DB_NAME		?= $(shell jq -r '.db_name.value' $(DB_INFRA_DIR)/tfoutput.json)
-app/table-count-sql: export DB_USER		?= $(shell jq -r '.db_username.value' $(DB_INFRA_DIR)/tfoutput.json)
-app/table-count-sql: export DB_PASS		?= $(shell jq -r '.db_pass.value' $(DB_INFRA_DIR)/tfoutput.json)
 app/table-count-sql: guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS
 	@PGPASSWORD=$(DB_PASS) psql -w -U $(DB_USER) -h $(DB_ADDR) $(DB_NAME) -c \
 	"select \
@@ -156,16 +159,15 @@ app/table-count-sql: guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS
 
 .PHONY: connect
 connect: ## Connect to the terraformed ec2 instance
-	ssh \
-		-i $(DB_INFRA_DIR)/id_rsa \
+connect: guard-SSH_PRIVATE_KEY
+	ssh -i $(SSH_PRIVATE_KEY_PATH) \
 		ec2-user@`jq -r '.ec2_address.value' $(DB_INFRA_DIR)/tfoutput.json`
 
 .PHONY: sync
 sync: ## Copy source files the to the terraformed EC2 instance
-sync: export EC2_ADDR		?= $(shell jq -r '.ec2_address.value' $(DB_INFRA_DIR)/tfoutput.json)
-sync: guard-EC2_ADDR
+sync: guard-EC2_ADDR guard-SSH_PRIVATE_KEY
 	cd $(ROOT_DIR) && rsync \
-		-e 'ssh -i $(DB_INFRA_DIR)/id_rsa' \
+		-e 'ssh -i $(SSH_PRIVATE_KEY_PATH)' \
 		-au \
 		--exclude '.terraform' \
 		--exclude '__pycache__' \

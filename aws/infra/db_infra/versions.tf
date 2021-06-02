@@ -15,6 +15,6 @@ terraform {
 
     dynamodb_table = "terraform-psql-locks"
     encrypt = true
-    
+
   }
 }
