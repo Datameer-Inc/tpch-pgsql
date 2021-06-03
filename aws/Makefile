@@ -7,7 +7,8 @@ MAKEFLAGS			+= --no-print-directory
 # vars
 DB_INSTANCE_TYPE	?=	db.t3.small
 EC2_INSTANCE_TYPE	?=	t3.micro
-REGION				?=	eu-west-2 # this is where the redeshift cluster is located
+# this is where the redeshift cluster is located
+REGION				?=	eu-west-2
 
 ACCOUNT_ID			=`aws sts get-caller-identity  | jq -r .Account`
 TAG					="$(ACCOUNT_ID).dkr.ecr.us-east-2.amazonaws.com/psql_data_generation:latest"
@@ -54,6 +55,7 @@ docker/run: ## Run the docker image with PWD mounted as /tpch-pgsql
 .PHONY: preflight
 preflight:
 	@command -v terraform &> /dev/null || { echo "[ERROR] Please install terraform with 'make local-terraform'."; exit 1; }
+	@command -v jq &> /dev/null || { echo "[ERROR] Please install jq before continuing"; exit 1; }
 
 .PHONY: tfcmd
 tfcmd: guard-TF_CMD
@@ -67,6 +69,7 @@ tfcmd: guard-TF_CMD
 tf/init: TF_CMD=init ## Init terraform resources
 tf/init: preflight tfcmd
 
+# Strange output w/ changes vs no-changes due to: https://github.com/hashicorp/terraform/issues/28844
 .PHONY: tf/plan
 tf/plan: TF_CMD=plan ## Plan all AWS resources
 tf/plan: preflight tfcmd
