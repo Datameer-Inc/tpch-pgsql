@@ -1,4 +1,10 @@
 provider "aws" {
+  default_tags {
+    tags = {
+      Purpose = "pgsql-dbgen benchmarks"
+      Owner   = "DevOps"
+    }
+  }
   region = var.region
 }
 
@@ -117,9 +123,10 @@ resource "aws_key_pair" "public_key" {
   }
 }
 
-resource "aws_s3_bucket" "psql_benchmark_data" {
-  bucket = "psql-benchmark-data"
-}
+# S3 bucket removed since it should not be accidentally deleted.
+# resource "aws_s3_bucket" "psql_benchmark_data" {
+#   bucket = "psql-benchmark-data"
+# }
 
 resource "aws_iam_role" "ec2_iam_role" {
   name               = "ec2iamrole"
@@ -140,11 +147,10 @@ resource "aws_iam_role" "ec2_iam_role" {
   ]
 }
 EOF
-}
-
-resource "aws_iam_role_policy_attachment" "ecr-access" {
-  role       = aws_iam_role.ec2_iam_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  ]
 }
 
 resource "aws_iam_instance_profile" "profile" {
@@ -164,7 +170,20 @@ resource "aws_instance" "ec2-instance" {
 
   root_block_device {
     volume_size = "100"
+    tags = {
+      "Purpose" = "db_benchmarks"
+    }
   }
+
+	user_data = <<EOF
+    #! /bin/bash
+    sudo yum update -y
+    sudo amazon-linux-extras install docker -y
+    sudo yum install jq -y
+    sudo service docker enable
+    sudo service docker start
+    sudo usermod -a -G docker ec2-user
+  EOF
 
   provisioner "file" {
     source      = "scripts/tpch.sh"
@@ -173,11 +192,6 @@ resource "aws_instance" "ec2-instance" {
 
   provisioner "remote-exec" {
     inline = [
-      "sudo yum update -y",
-      "sudo amazon-linux-extras install docker jq -y",
-      "sudo yum install jq -y",
-      "sudo service docker start",
-      "sudo usermod -a -G docker ec2-user",
       "chmod +x /home/ec2-user/tpch.sh",
     ]
   }
