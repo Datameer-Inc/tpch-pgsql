@@ -119,7 +119,11 @@ resource "aws_key_pair" "public_key" {
   public_key = tls_private_key.pk.public_key_openssh
 
   provisioner "local-exec" { # Create a "myKey.pem" to your computer!!
-    command = "echo '${tls_private_key.pk.private_key_pem}' > ./pqsql-benchmarks-key.pem && chmod 0400 ./pqsql-benchmarks-key.pem && openssl rsa -in pqsql-benchmarks-key.pem -pubout > ./pqsql-benchmarks-key.pub"
+    command = "echo '${tls_private_key.pk.private_key_pem}' > ./pqsql-benchmarks-key.pem && chmod 0400 ./pqsql-benchmarks-key.pem"
+  }
+
+  provisioner "local-exec" { # Create a "myKey.pem" to your computer!!
+    command = "echo '${tls_private_key.pk.public_key_pem}' > ./pqsql-benchmarks-key.pub && chmod 0644 ./pqsql-benchmarks-key.pub"
   }
 }
 
@@ -169,7 +173,7 @@ resource "aws_instance" "ec2-instance" {
   iam_instance_profile        = aws_iam_instance_profile.profile.name
 
   root_block_device {
-    volume_size = "100"
+    volume_size = "200"
     tags = {
       "Purpose" = "db_benchmarks"
     }
@@ -179,7 +183,7 @@ resource "aws_instance" "ec2-instance" {
     #! /bin/bash
     sudo yum update -y
     sudo amazon-linux-extras install docker -y
-    sudo yum install jq -y
+    sudo yum install jq git java-11-amazon-corretto-headless postgresql -y
     sudo service docker enable
     sudo service docker start
     sudo usermod -a -G docker ec2-user
@@ -215,7 +219,9 @@ resource "random_password" "password" {
 }
 
 resource "aws_db_instance" "psql" {
-  allocated_storage      = 10
+  # # create new if no target_snapshot_id
+  # count = var.target_snapshot_id ? 0 : 1
+  allocated_storage      = 200
   engine                 = "postgres"
   engine_version         = "12.5"
   instance_class         = var.rds_instance_type
@@ -228,6 +234,19 @@ resource "aws_db_instance" "psql" {
   skip_final_snapshot    = true
   db_subnet_group_name   = aws_db_subnet_group.benchmarks.name
 }
+
+# resource "aws_db_instance" "psql" {
+#   # create from snapshot if target_snapshot_id
+#   count = var.target_snapshot_id ? 1 : 0
+#   allocated_storage      = 200
+#   instance_class         = var.rds_instance_type
+#   name                   = "psqlbenchmarks"
+#   snapshot_identifier    = var.target_snapshot_id
+
+#   lifecycle {
+#     ignore_changes = [snapshot_identifier]
+#   }
+# }
 
 # hacks to render sensitive values
 data "template_file" "db_password" {

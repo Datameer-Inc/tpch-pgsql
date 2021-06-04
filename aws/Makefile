@@ -48,9 +48,20 @@ docker/push: ## Push to docker image (only if required)
 docker/push:
 	docker push $(TAG)
 
-.PHONY: docker/run
-docker/run: ## Run the docker image with PWD mounted as /tpch-pgsql
-	docker run -v $(ROOT_DIR):/tpch-pgsql --rm -ti $(TAG) bash
+.PHONY: docker/start
+docker/start: ## Start the docker container with PWD mounted as /tpch-pgsql
+	@[ "$(docker ps --format "{{.Names}}" --filter "name=data_generation")" ] || \
+		docker run -d --name="data_generation" $(TAG) sleep infinity
+
+.PHONY: docker/stop
+docker/stop: ## Start the docker container with PWD mounted as /tpch-pgsql
+	@[ "$(docker ps --format "{{.Names}}" --filter "name=data_generation")" ] && \
+		docker stop data_generation
+
+.PHONY: docker/connect
+docker/connect: ## Connect to the docker container (starting if necessary)
+docker/connect: docker/start
+	@docker exec -ti data_generation bash
 
 .PHONY: preflight
 preflight:
@@ -141,7 +152,7 @@ app/sample-commands: guard-SCALE guard-STREAMS guard-DB_ADDR guard-DB_NAME guard
 	@echo "./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) load"
 	@echo
 	@echo "Apply deltas:"
-	@for i in $$(seq 0 $$STREAMS); do echo "./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) -x $$i deltas"; done
+	@for i in $$(seq 0 $(STREAMS)); do echo "./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) -x $$i deltas"; done
 
 # TODO - integrate calling tpch commands (prepare, load, apply, etc)
 
