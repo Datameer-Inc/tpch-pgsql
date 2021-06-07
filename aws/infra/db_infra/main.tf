@@ -183,7 +183,7 @@ resource "aws_instance" "ec2-instance" {
     #! /bin/bash
     sudo yum update -y
     sudo amazon-linux-extras install docker -y
-    sudo yum install jq git java-11-amazon-corretto-headless postgresql -y
+    sudo yum install jq git java-11-amazon-corretto-headless postgresql bash-completion -y
     sudo service docker enable
     sudo service docker start
     sudo usermod -a -G docker ec2-user
