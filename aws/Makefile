@@ -156,7 +156,7 @@ app/delta/%: guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS app/copy-tp
 app/sample-commands: ## Generate sample commands
 app/sample-commands: guard-SCALE guard-STREAMS guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS app/copy-tpch-dbgen
 	@echo "Generate data"
-	@echo "( cd .. && ./tpch_pgsql.py -s $(SCALE) prepare )"
+	@echo "( cd .. && ./tpch_pgsql.py -s $(SCALE) -i $(S_DATADIR) prepare )"
 	@echo
 	@echo "Load data:"
 	@echo "( cd .. && ./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) -i $(S_DATADIR) load )"
@@ -207,7 +207,7 @@ cli/sample-commands:
 .PHONY: cli/push-to-s3
 cli/push-to-s3: ## Push CSV raw data to S3
 cli/push-to-s3:
-	@$(ECHO_CMD) aws s3 sync $(S_DATADIR) s3://psql-benchmark-data/tpch-pgsql-data-dumps/$(S_DATADIR)
+	cd $(ROOT_DIR) && $(ECHO_CMD) aws s3 sync $(S_DATADIR) s3://psql-benchmark-data/tpch-pgsql-data-dumps/$(S_DATADIR)
 
 .PHONY: cli/ec2-launch
 cli/ec2-launch: ## Launch instance using the templates under cli-input-templates
