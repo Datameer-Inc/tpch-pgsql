@@ -1,3 +1,9 @@
+output "db_identifier" {
+  description = "DB identifier"
+  value       = aws_db_instance.psql.identifier
+  sensitive   = false
+}
+
 output "db_address" {
   description = "DB address"
   value       = aws_db_instance.psql.address

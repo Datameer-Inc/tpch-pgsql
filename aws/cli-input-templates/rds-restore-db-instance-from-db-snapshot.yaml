@@ -1,0 +1,15 @@
+DBInstanceIdentifier: 'dbbenchmarks-scale1-0'  # [REQUIRED] Name of the DB instance to create from the DB snapshot.
+DBSnapshotIdentifier: 'scale1-0' # [REQUIRED] The identifier for the DB snapshot to restore from.
+DBInstanceClass: 'db.t3.medium' # The compute and memory capacity of the Amazon RDS DB instance, for example, db.
+AvailabilityZone: 'us-west-2b' # The Availability Zone (AZ) where the DB instance will be created.
+DBSubnetGroupName: 'default-vpc-09fea070' # The DB subnet group name to use for the new instance.
+MultiAZ: false # A value that indicates whether the DB instance is a Multi-AZ deployment.
+Tags: # A list of tags.
+- Key: 'Name'  # A key is the required name of the tag.
+  Value: 'dbbenchmarks-scale1-0' # A value is the optional value of the tag.
+VpcSecurityGroupIds: #  A list of EC2 VPC security groups to associate with this DB instance.
+- 'sg-0153c97f'
+- 'sg-81ac36ff'
+EnableIAMDatabaseAuthentication: false # A value that indicates whether to enable mapping of AWS Identity and Access Management (IAM) accounts to database accounts.
+DeletionProtection: false # A value that indicates whether the DB instance has deletion protection enabled.
+PubliclyAccessible: true
