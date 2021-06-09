@@ -154,17 +154,21 @@ app/delta/%: guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS app/copy-tp
 
 .PHONY: app/sample-commands
 app/sample-commands: ## Generate sample commands
+app/sample-commands: export DRY_RUN=1
 app/sample-commands: guard-SCALE guard-STREAMS guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS app/copy-tpch-dbgen
-	@echo "Generate data"
-	@echo "( cd .. && ./tpch_pgsql.py -s $(SCALE) -i $(S_DATADIR) prepare )"
+	@echo "# Target 'app/prepare' -> Generate data"
+	@$(MAKE) app/prepare
 	@echo
-	@echo "Load data:"
-	@echo "( cd .. && ./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) -i $(S_DATADIR) load )"
+	@echo "# Target 'app/load' -> Load data"
+	@$(MAKE) app/prepare
 	@echo
-	@echo "Applying deltas:"
-	@for i in $$(seq 0 2); do echo "( cd .. && ./tpch_pgsql.py -H $(DB_ADDR) -U $(DB_USER) -d $(DB_NAME) -W $(DB_PASS) -x $$i deltas )"; done
+	@echo "# Target 'app/delta/%' -> Applying deltas"
+	@for i in $$(seq 0 2); do $(MAKE) app/delta/$$i; done
 	@echo "..."
 	@echo "..."
+	@echo
+	@echo "# Target 'n/a' -> General psql commands, e.g. '\d' ..."
+	@echo PGPASSWORD=$(DB_PASS) psql -w -U $(DB_USER) -h $(DB_ADDR) $(DB_NAME) -c '\d'
 	@echo
 
 # TODO - integrate calling tpch commands (prepare, load, apply, etc)
@@ -188,19 +192,19 @@ app/table-count-sql: guard-DB_ADDR guard-DB_NAME guard-DB_USER guard-DB_PASS
 cli/sample-commands: ## Sample commands for running the aws targets
 cli/sample-commands: export DRY_RUN=1
 cli/sample-commands:
-	@echo "# Push raw CSV files to S3"
+	@echo "# Target 'cli/push-to-s3' -> Push raw CSV files to S3"
 	@$(MAKE) cli/push-to-s3
 	@echo
-	@echo "# Launch an EC2 instance for testing (TODO - replace values in the yaml input file)"
+	@echo "# Target 'cli/ec2-launch' -> Launch an EC2 instance for testing (TODO - replace values in the yaml input file)"
 	@$(MAKE) cli/ec2-launch
 	@echo
-	@echo "# Launch an RDS instance for testing (TODO - replace values in the yaml input file)"
+	@echo "# Target 'cli/rds-launch' -> Launch an RDS instance for testing (TODO - replace values in the yaml input file)"
 	@$(MAKE) cli/rds-launch
 	@echo
-	@echo "# Update the password of the RDS instance"
+	@echo "# Target 'cli/rds-update-password' -> Update the password of the RDS instance"
 	@$(MAKE) cli/rds-update-password
 	@echo
-	@echo "# Create a snapshot using SCALE based naming conventions"
+	@echo "# Target 'cli/rds-create-snapshot' -> Create a snapshot using SCALE based naming conventions"
 	@$(MAKE) cli/rds-create-snapshot
 	@echo
 
